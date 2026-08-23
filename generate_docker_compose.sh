@@ -17,6 +17,8 @@ echo 'services:
       context: ./services/server
       dockerfile: Dockerfile
     container_name: server
+    ports:
+      - 5678:5678
     environment:
       - PYTHONUNBUFFERED=1
       - SERVER_HOST=server
