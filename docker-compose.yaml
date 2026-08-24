@@ -23,8 +23,8 @@ services:
       - SERVER_HOST=server
       - SERVER_PORT=5678
     volumes:
-      - ./input:input/
-      - ./output:output/
+      - ./input:/input
+      - ./output:/output
 
   client_1:
     build:
@@ -38,8 +38,8 @@ services:
       - SERVER_HOST=server
       - SERVER_PORT=5678
     volumes:
-      - ./input:input/
-      - ./output:output/
+      - ./input:/input
+      - ./output:/output
 
   client_2:
     build:
@@ -53,8 +53,8 @@ services:
       - SERVER_HOST=server
       - SERVER_PORT=5678
     volumes:
-      - ./input:input/
-      - ./output:output/
+      - ./input:/input
+      - ./output:/output
 
   client_3:
     build:
@@ -68,8 +68,8 @@ services:
       - SERVER_HOST=server
       - SERVER_PORT=5678
     volumes:
-      - ./input:input/
-      - ./output:output/
+      - ./input:/input
+      - ./output:/output
 
   client_4:
     build:
@@ -83,5 +83,5 @@ services:
       - SERVER_HOST=server
       - SERVER_PORT=5678
     volumes:
-      - ./input:input/
-      - ./output:output/
+      - ./input:/input
+      - ./output:/output

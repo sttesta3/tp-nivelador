@@ -37,6 +37,6 @@ for ((i=0; i<$1; i++)); do echo "
       - SERVER_HOST=server
       - SERVER_PORT=5678
     volumes:
-      - ./input:input/
-      - ./output:output/" >> docker-compose.yaml 
+      - ./input:/input
+      - ./output:/output" >> docker-compose.yaml 
 done
