@@ -35,5 +35,8 @@ for ((i=0; i<$1; i++)); do echo "
     environment:
       - AGENCY_ID=$i
       - SERVER_HOST=server
-      - SERVER_PORT=5678" >> docker-compose.yaml 
+      - SERVER_PORT=5678
+    volumes:
+      - ./input:input/
+      - ./output:output/" >> docker-compose.yaml 
 done

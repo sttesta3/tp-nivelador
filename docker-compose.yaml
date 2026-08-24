@@ -22,6 +22,9 @@ services:
       - AGENCY_ID=0
       - SERVER_HOST=server
       - SERVER_PORT=5678
+    volumes:
+      - ./input:input/
+      - ./output:output/
 
   client_1:
     build:
@@ -34,6 +37,9 @@ services:
       - AGENCY_ID=1
       - SERVER_HOST=server
       - SERVER_PORT=5678
+    volumes:
+      - ./input:input/
+      - ./output:output/
 
   client_2:
     build:
@@ -46,6 +52,9 @@ services:
       - AGENCY_ID=2
       - SERVER_HOST=server
       - SERVER_PORT=5678
+    volumes:
+      - ./input:input/
+      - ./output:output/
 
   client_3:
     build:
@@ -58,6 +67,9 @@ services:
       - AGENCY_ID=3
       - SERVER_HOST=server
       - SERVER_PORT=5678
+    volumes:
+      - ./input:input/
+      - ./output:output/
 
   client_4:
     build:
@@ -70,3 +82,6 @@ services:
       - AGENCY_ID=4
       - SERVER_HOST=server
       - SERVER_PORT=5678
+    volumes:
+      - ./input:input/
+      - ./output:output/
