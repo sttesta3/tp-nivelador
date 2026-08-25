@@ -118,6 +118,8 @@ func (client *Client) Run() error {
 			return err
 		}
 
+		// make crea un buffer inicializado en cero. 
+		// se debe contar la cantidad de bytes distintos de null para no escribir basura
 		valid_byte_count := 0
 		for responseBuffer[valid_byte_count] != '\x00' {
 			valid_byte_count += 1
@@ -126,13 +128,13 @@ func (client *Client) Run() error {
 		responseBuffer[valid_byte_count+1] = '\n'
 		valid_byte_count += 2 
 
-		bytes_escritos, err := writer.Write(responseBuffer[0:valid_byte_count])
-		if bytes_escritos != valid_byte_count || err != nil {
+		writen_bytes, err := writer.Write(responseBuffer[0:valid_byte_count])
+		if writen_bytes != valid_byte_count || err != nil {
 			logger.Error("write-response-to-file", logger.Fail, messageArgs...)
 			return err
 		}
-		messageId += 1 
 		writer.Flush()
+		messageId += 1 
 
 		time.Sleep(ECHO_CLIENT_MESSAGE_DELAY_MS * time.Millisecond)
 	}
