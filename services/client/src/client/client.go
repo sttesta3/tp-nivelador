@@ -118,9 +118,16 @@ func (client *Client) Run() error {
 			return err
 		}
 
-		bytes_escritos, err := writer.Write(responseBuffer)
-		writer.WriteByte('\n')
-		if bytes_escritos != len(responseBuffer) || err != nil {
+		valid_byte_count := 0
+		for responseBuffer[valid_byte_count] != '\x00' {
+			valid_byte_count += 1
+		}
+		responseBuffer[valid_byte_count] = '\r'
+		responseBuffer[valid_byte_count+1] = '\n'
+		valid_byte_count += 2 
+
+		bytes_escritos, err := writer.Write(responseBuffer[0:valid_byte_count])
+		if bytes_escritos != valid_byte_count || err != nil {
 			logger.Error("write-response-to-file", logger.Fail, messageArgs...)
 			return err
 		}
