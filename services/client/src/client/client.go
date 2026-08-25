@@ -1,8 +1,10 @@
 package client
 
 import (
+	"os"
 	"net"
 	"time"
+	"bufio"
 
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/logger"
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/safe_socket"
@@ -19,11 +21,15 @@ type ClientConfig struct {
 	ServerHost string
 	ServerPort string
 	AgencyId   string
+	InputFile  string
+	OutputFile string
 }
 
 type Client struct {
 	conn   net.Conn
 	config ClientConfig
+	inputFile  *os.File
+	outputFile *os.File	
 }
 
 func NewClient(config ClientConfig) (*Client, error) {
@@ -32,8 +38,13 @@ func NewClient(config ClientConfig) (*Client, error) {
 		logger.Warn("connect-to-server", logger.Fail)
 		return nil, err
 	}
+	inputFile, outputFile, err := openFiles(config.InputFile, config.OutputFile)
+	if err != nil {
+		logger.Error("open-files", logger.Fail, "err", err)
+		return nil, err
+	}
 
-	client := &Client{conn: conn, config: config}
+	client := &Client{conn: conn, config: config, inputFile: inputFile, outputFile: outputFile}
 	return client, nil
 }
 
@@ -58,15 +69,38 @@ func connectToServer(host, port string) (net.Conn, error) {
 	return conn, err
 }
 
+func openFiles(inputFile, outputFile string) (*os.File, *os.File, error) {
+	InputFile, err := os.Open(inputFile)
+	if err != nil {
+		logger.Error("open-input-file", logger.Fail, "err", err)
+		return nil, nil, err
+	}
+
+	OutputFile, err := os.OpenFile(outputFile, os.O_TRUNC|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		logger.Error("open-output-file", logger.Fail, "err", err)
+		InputFile.Close()
+		return nil, nil, err
+	}
+
+	return InputFile, OutputFile, nil
+}
+
 func (client *Client) Run() error {
 	const mainAction = "test-echo-server"
 	defer client.conn.Close()
+	defer client.inputFile.Close()
+	defer client.outputFile.Close()
 
-	for messageId := range ECHO_CLIENT_MESSAGE_AMOUNT {
+	scanner := bufio.NewScanner(client.inputFile)
+	writer := bufio.NewWriter(client.outputFile)
+	
+	messageId := 0
+	for scanner.Scan() {
 		messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
-
-		clientMessage := client.config.AgencyId
+		
+		clientMessage := scanner.Text()
 
 		if err := safe_socket.SendAll(client.conn, []byte(clientMessage)); err != nil {
 			logger.Error("send-message", logger.Fail, messageArgs...)
@@ -83,6 +117,15 @@ func (client *Client) Run() error {
 			logger.Error("check-response", logger.Fail, messageArgs...)
 			return err
 		}
+
+		bytes_escritos, err := writer.Write(responseBuffer)
+		writer.WriteByte('\n')
+		if bytes_escritos != len(responseBuffer) || err != nil {
+			logger.Error("write-response-to-file", logger.Fail, messageArgs...)
+			return err
+		}
+		messageId += 1 
+		writer.Flush()
 
 		time.Sleep(ECHO_CLIENT_MESSAGE_DELAY_MS * time.Millisecond)
 	}
