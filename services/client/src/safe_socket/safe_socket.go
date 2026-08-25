@@ -10,7 +10,7 @@ func SendAll(socket io.Writer, bytes []byte) error {
 		bytes_written_on_this_attempt, err := socket.Write(bytes[bytes_written:])
 		if err != nil {
 			return err
-		}
+		} 
 		bytes_written += bytes_written_on_this_attempt
 	}
 	return nil
