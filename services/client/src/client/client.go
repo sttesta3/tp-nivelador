@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 	"bufio"
+	"errors"
 
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/logger"
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/safe_socket"
@@ -26,8 +27,8 @@ type ClientConfig struct {
 }
 
 type Client struct {
-	conn   net.Conn
-	config ClientConfig
+	channel    net.Conn
+	config 	   ClientConfig
 	inputFile  *os.File
 	outputFile *os.File	
 }
@@ -86,6 +87,16 @@ func openFiles(inputFile, outputFile string) (*os.File, *os.File, error) {
 	return InputFile, OutputFile, nil
 }
 
+func formatMessage(message string) (string, err) {
+	messageLen := len(message)
+	if messageLen > 255 {
+		err := errors.New("integer overflow")
+		logger.Error("format-message", logger.Fail, "message too long", err)
+		return nil, err
+	}
+	return append([]byte(uint8(messageLen)), []byte(message)..), nil
+}
+
 func (client *Client) Run() error {
 	const mainAction = "test-echo-server"
 	defer client.conn.Close()
@@ -100,7 +111,10 @@ func (client *Client) Run() error {
 		messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
 		
-		clientMessage := scanner.Text()
+		if clientMessage, err := formatMessage(scanner.Text()); err != nil {
+			logger.Error("format-message", logger.Fail, messageArgs...)
+			return err
+		}
 
 		if err := safe_socket.SendAll(client.conn, []byte(clientMessage)); err != nil {
 			logger.Error("send-message", logger.Fail, messageArgs...)
