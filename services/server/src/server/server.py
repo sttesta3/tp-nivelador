@@ -14,7 +14,7 @@ class Server:
         message_len = len(message)
         if message_len > 255:
             raise Exception("Integer overflow")
-        return bytes([message_len]).extend(message)
+        return bytes([message_len]) + message
 
     def _handle_client(self, client_socket):
         action = "handle-client"
@@ -22,9 +22,9 @@ class Server:
         try:
             logger.info(action, logger.LogResult.in_progress)
             while True:
-                client_message = self._format_message(safe_socket.recv_all(
+                client_message = safe_socket.recv_all(
                     client_socket, _ECHO_SERVER_MESSAGE_SIZE
-                ))
+                )
                 if not client_message:
                     logger.info(
                         action,

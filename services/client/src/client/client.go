@@ -27,7 +27,7 @@ type ClientConfig struct {
 }
 
 type Client struct {
-	channel    net.Conn
+	conn    net.Conn
 	config 	   ClientConfig
 	inputFile  *os.File
 	outputFile *os.File	
@@ -87,14 +87,15 @@ func openFiles(inputFile, outputFile string) (*os.File, *os.File, error) {
 	return InputFile, OutputFile, nil
 }
 
-func formatMessage(message string) (string, err) {
+func formatMessage(message string) ([]byte, error) {
 	messageLen := len(message)
 	if messageLen > 255 {
 		err := errors.New("integer overflow")
 		logger.Error("format-message", logger.Fail, "message too long", err)
 		return nil, err
 	}
-	return append([]byte(uint8(messageLen)), []byte(message)..), nil
+
+	return append([]byte{uint8(messageLen)}, []byte(message)...), nil
 }
 
 func (client *Client) Run() error {
@@ -111,12 +112,13 @@ func (client *Client) Run() error {
 		messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
 		
-		if clientMessage, err := formatMessage(scanner.Text()); err != nil {
+		clientMessage, err := formatMessage(scanner.Text())
+		if err != nil {
 			logger.Error("format-message", logger.Fail, messageArgs...)
 			return err
 		}
 
-		if err := safe_socket.SendAll(client.conn, []byte(clientMessage)); err != nil {
+		if err := safe_socket.SendAll(client.conn, clientMessage); err != nil {
 			logger.Error("send-message", logger.Fail, messageArgs...)
 			return err
 		}
@@ -127,23 +129,19 @@ func (client *Client) Run() error {
 			return err
 		}
 
-		if string(responseBuffer) == clientMessage {
+		if string(responseBuffer) == string(clientMessage) {
 			logger.Error("check-response", logger.Fail, messageArgs...)
 			return err
 		}
 
 		// make crea un buffer inicializado en cero. 
 		// se debe contar la cantidad de bytes distintos de null para no escribir basura
-		valid_byte_count := 0
-		for responseBuffer[valid_byte_count] != '\x00' {
-			valid_byte_count += 1
-		}
-		responseBuffer[valid_byte_count] = '\r'
-		responseBuffer[valid_byte_count+1] = '\n'
-		valid_byte_count += 2 
-
-		writen_bytes, err := writer.Write(responseBuffer[0:valid_byte_count])
-		if writen_bytes != valid_byte_count || err != nil {
+		messageLen := uint8(responseBuffer[0])
+		responseBuffer[1+messageLen] = '\r'
+		responseBuffer[2+messageLen] = '\n'
+		messageLen += 2
+		writen_bytes, err := writer.Write(responseBuffer[1:1+messageLen])
+		if writen_bytes != int(messageLen) || err != nil || responseBuffer[1+messageLen] != '\x00' {
 			logger.Error("write-response-to-file", logger.Fail, messageArgs...)
 			return err
 		}

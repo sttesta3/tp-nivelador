@@ -9,9 +9,9 @@ def recv_all(socket: socket.socket, size):
     if not bytes_readen:
         raise Exception("connection closed")
     while len(bytes_readen) < bytes_readen[0] + 1:
-        bytes_readen.extend(socket.recv(size))
+        bytes_readen += socket.recv(size)
 
-    retrun bytes_readen
+    return bytes_readen
 
 def send_all(socket: socket.socket, bytes):
     bytes_written = 0
