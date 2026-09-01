@@ -50,9 +50,9 @@ class Server:
                 try:
                     logger.info(action, logger.LogResult.in_progress)
                     client_socket, _ = server_socket.accept()
+                    logger.info(action, logger.LogResult.success)
                 except Exception as e:
                     logger.error(action, logger.LogResult.fail)
                     raise e
-                logger.info(action, logger.LogResult.success)
 
                 self._handle_client(client_socket)

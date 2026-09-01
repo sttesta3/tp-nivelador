@@ -1,9 +1,6 @@
 package safe_socket
 
-import (
-	"io"
-	"errors"
-)
+import "io"
 
 //TODO: Complete with a short-read/short-write tolerant implementation
 
@@ -29,17 +26,13 @@ func RecvAll(socket io.Reader, size int) ([]byte, error) {
 	bytes_readen, err := socket.Read(buff)
 	if err != nil {
 		return nil, err
-	} else if bytes_readen == 0 {
-		return nil, errors.New("connection closed")
-	}
+	} 
 
 	for bytes_readen < int(buff[0]) + 1 {
 		bytes_readen_tmp, err := socket.Read(buff[bytes_readen:])
 		if err != nil {
 			return nil, err
-		} else if bytes_readen == 0 {
-			return nil, errors.New("connection closed")
-		}
+		} 
 		bytes_readen += bytes_readen_tmp
 	}
 

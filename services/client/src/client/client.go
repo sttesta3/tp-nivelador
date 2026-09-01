@@ -98,6 +98,18 @@ func formatMessage(message string) ([]byte, error) {
 	return append([]byte{uint8(messageLen)}, []byte(message)...), nil
 }
 
+func parseMessage(bytes []byte) ([]byte, error) {
+	if len(bytes) < 1 {
+		return nil, errors.New("empty buffer")
+	}
+	messageLen := int(bytes[0])
+	if len(bytes) < 1+messageLen {
+    	return nil, errors.New("response buffer is shorter than message len")
+	}
+	return append(bytes[1 : 1+messageLen],'\r','\n'), nil
+}
+
+
 func (client *Client) Run() error {
 	const mainAction = "test-echo-server"
 	defer client.conn.Close()
@@ -134,20 +146,19 @@ func (client *Client) Run() error {
 			return err
 		}
 
-		// make crea un buffer inicializado en cero. 
-		// se debe contar la cantidad de bytes distintos de null para no escribir basura
-		messageLen := uint8(responseBuffer[0])
-		responseBuffer[1+messageLen] = '\r'
-		responseBuffer[2+messageLen] = '\n'
-		messageLen += 2
-		writen_bytes, err := writer.Write(responseBuffer[1:1+messageLen])
-		if writen_bytes != int(messageLen) || err != nil || responseBuffer[1+messageLen] != '\x00' {
-			logger.Error("write-response-to-file", logger.Fail, messageArgs...)
+		message, err := parseMessage(responseBuffer)
+		if err != nil {
+			logger.Error("parse-response", logger.Fail, messageArgs...)
 			return err
 		}
-		writer.Flush()
-		messageId += 1 
 
+		if _, err := writer.Write(message); err != nil {
+		    logger.Error("write-response-to-file", logger.Fail, messageArgs...)
+		    return err
+		}
+		writer.Flush()
+
+		messageId += 1 
 		time.Sleep(ECHO_CLIENT_MESSAGE_DELAY_MS * time.Millisecond)
 	}
 	logger.Info(mainAction, logger.Success, "agency-id", client.config.AgencyId)
