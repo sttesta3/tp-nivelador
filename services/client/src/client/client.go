@@ -87,23 +87,26 @@ func openFiles(inputFile, outputFile string) (*os.File, *os.File, error) {
 	return InputFile, OutputFile, nil
 }
 
-func formatMessage(message string) ([]byte, error) {
-	messageLen := len(message)
-	if messageLen > 255 {
+func (client *Client) formatMessage(message string) ([]byte, error) {
+	agencyLen := len(client.config.AgencyId)
+	messageLen := len(message) + agencyLen
+
+	if messageLen > 255 || agencyLen > 255 {	
 		err := errors.New("integer overflow")
 		logger.Error("format-message", logger.Fail, "message too long", err)
 		return nil, err
-	}
+	} 
 
-	return append([]byte{uint8(messageLen)}, []byte(message)...), nil
+	response := append([]byte{uint8(messageLen),uint8(agencyLen)}, []byte(client.config.AgencyId)...)
+	return append(response, []byte(message)...), nil
 }
 
-func parseMessage(bytes []byte) ([]byte, error) {
+func (client *Client) parseMessage(bytes []byte) ([]byte, error) {
 	if len(bytes) < 1 {
 		return nil, errors.New("empty buffer")
 	}
 	messageLen := int(bytes[0])
-	if len(bytes) < 1+messageLen {
+	if len(bytes) < 1+messageLen {	
     	return nil, errors.New("response buffer is shorter than message len")
 	}
 	return append(bytes[1 : 1+messageLen],'\r','\n'), nil
@@ -124,7 +127,7 @@ func (client *Client) Run() error {
 		messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
 		
-		clientMessage, err := formatMessage(scanner.Text())
+		clientMessage, err := client.formatMessage(scanner.Text())
 		if err != nil {
 			logger.Error("format-message", logger.Fail, messageArgs...)
 			return err
@@ -146,7 +149,7 @@ func (client *Client) Run() error {
 			return err
 		}
 
-		message, err := parseMessage(responseBuffer)
+		message, err := client.parseMessage(responseBuffer)
 		if err != nil {
 			logger.Error("parse-response", logger.Fail, messageArgs...)
 			return err
