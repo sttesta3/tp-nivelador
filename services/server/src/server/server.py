@@ -17,11 +17,10 @@ class Server:
         return bytes([len(response_bytes)]) + response_bytes
 
     def _format_ack(self) -> bytes:
-        return bytes(['0'])
+        return bytes([0])
 
-    def _process_message(self, message, agencyId) -> [lottery.Bet]:
-        message_len = message[0]
-        message_fields = message[1:1+message_len].decode('utf-8').split(',')
+    def _process_message(self, message, agency_id) -> [lottery.Bet]:
+        message_fields = message.decode('utf-8').split(',')
         if len(message_fields) != 5:
             logger.Warn("process-message",logger.Fail, "Mensaje mal formateado, debe tener cinco campos separados por coma")
             raise Exception()
@@ -32,20 +31,21 @@ class Server:
         birthdate = message_fields[3]
         number = int(message_fields[4])
 
-        return [lottery.Bet(agencyId,first_name,last_name,document,birthdate,number)]        
+        return [lottery.Bet(agency_id,first_name,last_name,document,birthdate,number)]        
 
     def _receive_message(self, client_socket):
         message = bytearray()
         message_len = safe_socket.recv_all(client_socket, 1)
         if message_len:
-            message = safe_socket.recv_all(client_socket, message_len)
+            message = safe_socket.recv_all(client_socket, message_len[0])
         return message
 
     def _handle_client(self, client_socket):
         action = "handle-client"
 
         agency_id = self._receive_message(client_socket)
-        client_lottery =  lottery.Lottery(agency_id)
+        client_lottery =  lottery.Lottery(str(agency_id))
+        safe_socket.send_all(client_socket, self._format_ack())
 
         message_amount = 0
         try:
@@ -64,7 +64,7 @@ class Server:
                             safe_socket.send_all(client_socket, self._format_response(winner))
                     return
                 
-                bets = self._process_message(client_message)
+                bets = self._process_message(client_message, agency_id)
                 client_lottery.store_bets(bets)
                 message_amount += 1
 

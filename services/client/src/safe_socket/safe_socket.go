@@ -16,7 +16,7 @@ func SendAll(socket io.Writer, bytes []byte) error {
 
 func RecvAll(socket io.Reader, size int) ([]byte, error) {
 	buff := make([]byte, size)
-	bytes_readen = 0 
+	bytes_readen := 0 
 	for bytes_readen < size {
 		bytes_readen_tmp, err := socket.Read(buff[bytes_readen:])
 		if err != nil {

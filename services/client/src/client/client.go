@@ -96,7 +96,7 @@ func (client *Client) formatMessage(message string) ([]byte, error) {
 		return nil, err
 	} 
 
-	return append([]byte{uint8(messageLen)}, []byte(message)...)
+	return append([]byte{uint8(messageLen)}, []byte(message)...), nil
 }
 
 func (client *Client) parseMessage(bytes []byte) ([]byte, error) {
@@ -126,19 +126,20 @@ func (client *Client) sendMessage(message string, messageArgs []any) (error) {
 }
 
 func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
-	frameLen, err := safe_socket.RecvAll(client.conn, 1)
-	if err != nil {
-		logger.Error("recv-response", logger.Fail, messageArgs...)
-		return nil, err
-	}
-
 	var responseBuffer []byte
 	var err error
 
+	frameLenBytes, err := safe_socket.RecvAll(client.conn, 1)
+	if err != nil {
+		logger.Error("recv-response", logger.Fail, err)
+		return nil, err
+	}
+
+	frameLen := uint8(frameLenBytes[0])
 	if frameLen > 0 {
-		responseBuffer, err = safe_socket.RecvAll(client.conn, frameLen)
+		responseBuffer, err = safe_socket.RecvAll(client.conn, int(frameLen))
 		if err != nil {
-			logger.Error("recv-response", logger.Fail, messageArgs...)
+			logger.Error("recv-response", logger.Fail, err)
 			return nil, err
 		}
 	}
@@ -147,17 +148,16 @@ func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
 
 func (client *Client) requestReply(message string, messageId int) ([]byte, error) {
 	messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
-	logger.Info(mainAction, logger.InProgress, messageArgs...)
+	logger.Info("server-request-reply", logger.InProgress, messageArgs...)
 		
-	clientMessage, err := client.sendMessage(message, messageArgs)
-	if client.send != nil {
+	if err := client.sendMessage(message, messageArgs); err != nil {
 		logger.Error("send-message", logger.Fail, messageArgs...)
 		return nil, err
 	}
 
 	reply, err := client.receiveMessage(messageArgs)
 	if err != nil {
-		logger.Error("recv-response", logger.Fail, messageArgs...)
+		logger.Error("recv-message", logger.Fail, messageArgs...)
 		return nil, err
 	}
 
@@ -173,10 +173,10 @@ func (client *Client) Run() error {
 	scanner := bufio.NewScanner(client.inputFile)
 	writer := bufio.NewWriter(client.outputFile)
 	
-	responseBuffer, err := requestReply(client.config.AgencyId, -1)
+	responseBuffer, err := client.requestReply(client.config.AgencyId, -1)
 	if responseBuffer != nil {
 		logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la agencia")
-		return error.new("Server respondio incorrectamente al enviar agencia")
+		return errors.New("Server respondio incorrectamente al enviar agencia")
     }	
 
 	var messageArgs []any
@@ -185,10 +185,12 @@ func (client *Client) Run() error {
 		messageArgs = []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
 		
-		responseBuffer, err := requestReply(scanner.Text())
-		if responseBuffer != nil {
+		if responseBuffer, err := client.requestReply(scanner.Text(), messageId); err != nil {
+			logger.Error("request-reply", logger.Fail, messageArgs...)
+			return err
+		} else if responseBuffer != nil {
 			logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la apuesta")
-			return error.new("Server respondio incorrectamente al enviar apuesta")
+			return errors.New("Server respondio incorrectamente al enviar apuesta")
 		}
 /*
 		if string(responseBuffer) == string(clientMessage) {
@@ -220,17 +222,17 @@ func (client *Client) Run() error {
     }	
 	
 	// Recibir los ganadores 
-	message, err := client.receiveMessage()
+	message, err := client.receiveMessage(messageArgs)
 	for err == nil && message != nil {
 	    outputFileLine := append(message, '\r', '\n')
 	    if _, err = writer.Write(outputFileLine); err != nil {
 	        logger.Error("write-response-to-file", logger.Fail, messageArgs...)
 	        return err
 	    }
-	
-	    message, err = client.receiveMessage()
+
+	    message, err = client.receiveMessage(messageArgs)
 	}
-	
+
 	if err != nil {
 	    logger.Error("receive-message", logger.Fail, messageArgs...)
 	    return err

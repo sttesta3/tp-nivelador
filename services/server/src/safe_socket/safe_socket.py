@@ -1,9 +1,13 @@
 import socket
+import logger
 
 def recv_all(socket: socket.socket, size):
     bytes_readen = bytearray()
     while len(bytes_readen) < size:  
-        bytes_readen += socket.recv(size - len(bytes_readen))
+        bytes_readen_tmp = socket.recv(size - len(bytes_readen))
+        if not bytes_readen_tmp:
+            return
+        bytes_readen += bytes_readen_tmp 
     return bytes_readen
 
 def send_all(socket: socket.socket, bytes):
