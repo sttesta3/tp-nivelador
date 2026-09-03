@@ -43,7 +43,7 @@ class Server:
     def _handle_client(self, client_socket):
         action = "handle-client"
 
-        agency_id = self._receive_message(client_socket)
+        agency_id = int(self._receive_message(client_socket))
         client_lottery =  lottery.Lottery(str(agency_id))
         safe_socket.send_all(client_socket, self._format_ack())
 
@@ -59,9 +59,9 @@ class Server:
                         "messages-amount",
                         message_amount,
                     )
-                    for bet in lottery.load_bets():
-                        if lottery.has_won(bet):
-                            safe_socket.send_all(client_socket, self._format_response(winner))
+                    for bet in client_lottery.load_bets():
+                        if client_lottery.has_won(bet):
+                            safe_socket.send_all(client_socket, self._format_response(bet))
                     return
                 
                 bets = self._process_message(client_message, agency_id)
