@@ -1,14 +1,9 @@
 import socket
 
-# TODO: Complete with a short-read/short-write tolerant implementation
-
-
 def recv_all(socket: socket.socket, size):
-    # Misma logica que codigo en cliente, para mas informacion leer comentario en safe_socket cliente
-    bytes_readen = socket.recv(size)
-    if bytes_readen:
-        while len(bytes_readen) < bytes_readen[0] + 1:  
-            bytes_readen += socket.recv(size)
+    bytes_readen = bytearray()
+    while len(bytes_readen) < size:  
+        bytes_readen += socket.recv(size - len(bytes_readen))
     return bytes_readen
 
 def send_all(socket: socket.socket, bytes):
