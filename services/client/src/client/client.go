@@ -84,7 +84,7 @@ func openFiles(inputFile, outputFile string) (*os.File, *os.File, error) {
 	return InputFile, OutputFile, nil
 }
 
-func (client *Client) formatMessage(message string) ([]byte, error) {
+func (client *Client) formatFrame(message string) ([]byte, error) {
 	messageLen := len(message) 
 
 	if messageLen > 255 {	
@@ -96,19 +96,8 @@ func (client *Client) formatMessage(message string) ([]byte, error) {
 	return append([]byte{uint8(messageLen)}, []byte(message)...), nil
 }
 
-func (client *Client) parseMessage(bytes []byte) ([]byte, error) {
-	if len(bytes) < 1 {
-		return nil, errors.New("empty buffer")
-	}
-	messageLen := int(bytes[0])
-	if len(bytes) < 1+messageLen {	
-    	return nil, errors.New("response buffer is shorter than message len")
-	}
-	return append(bytes[1 : 1+messageLen],'\r','\n'), nil
-}
-
 func (client *Client) sendMessage(message string, messageArgs []any) (error) {
-	clientMessage, err := client.formatMessage(message)
+	clientMessage, err := client.formatFrame(message)
 	if err != nil {
 		logger.Error("format-message", logger.Fail, messageArgs...)
 		return err
