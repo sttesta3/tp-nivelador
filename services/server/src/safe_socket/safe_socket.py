@@ -1,5 +1,4 @@
 import socket
-import logger
 
 def recv_all(socket: socket.socket, size):
     bytes_readen = socket.recv(size)
