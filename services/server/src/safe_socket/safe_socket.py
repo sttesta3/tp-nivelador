@@ -2,7 +2,7 @@ import socket
 import logger
 
 def recv_all(socket: socket.socket, size):
-    bytes_readen = bytearray()
+    bytes_readen = socket.recv(size)
     while len(bytes_readen) < size:  
         bytes_readen_tmp = socket.recv(size - len(bytes_readen))
         if not bytes_readen_tmp:

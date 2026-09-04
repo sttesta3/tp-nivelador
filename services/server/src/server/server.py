@@ -61,6 +61,7 @@ class Server:
                     )
                     for bet in client_lottery.load_bets():
                         if client_lottery.has_won(bet):
+                            logger.info(action, "va mensaje", bet.first_name)
                             safe_socket.send_all(client_socket, self._format_response(bet))
                     return
                 

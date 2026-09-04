@@ -2,6 +2,7 @@ package client
 
 import (
 	"os"
+	"io"
 	"net"
 	"time"
 	"bufio"
@@ -131,15 +132,19 @@ func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
 
 	frameLenBytes, err := safe_socket.RecvAll(client.conn, 1)
 	if err != nil {
-		logger.Error("recv-response", logger.Fail, err)
-		return nil, err
+		if errors.Is(err, io.EOF) {
+			return nil, nil	// no message (no error)
+		} else {
+			logger.Error("", logger.Fail, err)
+			return nil, err
+		}
 	}
 
 	frameLen := uint8(frameLenBytes[0])
 	if frameLen > 0 {
 		responseBuffer, err = safe_socket.RecvAll(client.conn, int(frameLen))
 		if err != nil {
-			logger.Error("recv-response", logger.Fail, err)
+			logger.Error("recv-message", logger.Fail, err)
 			return nil, err
 		}
 	}
@@ -192,26 +197,7 @@ func (client *Client) Run() error {
 			logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la apuesta")
 			return errors.New("Server respondio incorrectamente al enviar apuesta")
 		}
-/*
-		if string(responseBuffer) == string(clientMessage) {
-			logger.Error("check-response", logger.Fail, messageArgs...)
-			return err
-		}
-
-		message, err := client.parseMessage(responseBuffer)
-		if err != nil {
-			logger.Error("parse-response", logger.Fail, messageArgs...)
-			return err
-		}
-
-		if _, err := writer.Write(message); err != nil {
-		    logger.Error("write-response-to-file", logger.Fail, messageArgs...)
-		    return err
-		}
-		writer.Flush()
-*/
 		messageId += 1 
-//		time.Sleep(ECHO_CLIENT_MESSAGE_DELAY_MS * time.Millisecond)
 	}
 
 	if 	tcpConn, ok := client.conn.(*net.TCPConn); ok {
@@ -233,7 +219,7 @@ func (client *Client) Run() error {
 	    message, err = client.receiveMessage(messageArgs)
 	}
 
-	if err != nil {
+	if err != nil   {
 	    logger.Error("receive-message", logger.Fail, messageArgs...)
 	    return err
 	}
