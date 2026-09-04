@@ -3,8 +3,6 @@ import logger
 import safe_socket
 import lottery 
 
-_ECHO_SERVER_MESSAGE_SIZE = 1024
-
 class Server:
     def __init__(self, server_host: str, server_port: int) -> None:
         self.server_host = server_host
