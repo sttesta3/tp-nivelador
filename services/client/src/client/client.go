@@ -2,9 +2,11 @@ package client
 
 import (
 	"os"
+	"io"
 	"net"
 	"time"
 	"bufio"
+	"errors"
 
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/logger"
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/safe_socket"
@@ -12,10 +14,6 @@ import (
 
 const CONNECTION_ATTEMPTS_MAX = 3
 const CONNECTION_ATTEMPS_DELAY_MS = 500
-
-const ECHO_CLIENT_BUFFER_SIZE = 512
-const ECHO_CLIENT_MESSAGE_AMOUNT = 3
-const ECHO_CLIENT_MESSAGE_DELAY_MS = 1000
 
 type ClientConfig struct {
 	ServerHost string
@@ -26,8 +24,8 @@ type ClientConfig struct {
 }
 
 type Client struct {
-	conn   net.Conn
-	config ClientConfig
+	conn    net.Conn
+	config 	   ClientConfig
 	inputFile  *os.File
 	outputFile *os.File	
 }
@@ -86,6 +84,76 @@ func openFiles(inputFile, outputFile string) (*os.File, *os.File, error) {
 	return InputFile, OutputFile, nil
 }
 
+func (client *Client) formatFrame(message string) ([]byte, error) {
+	messageLen := len(message) 
+
+	if messageLen > 255 {	
+		err := errors.New("integer overflow")
+		logger.Error("format-message", logger.Fail, "message too long", err)
+		return nil, err
+	} 
+
+	return append([]byte{uint8(messageLen)}, []byte(message)...), nil
+}
+
+func (client *Client) sendMessage(message string, messageArgs []any) (error) {
+	clientMessage, err := client.formatFrame(message)
+	if err != nil {
+		logger.Error("format-message", logger.Fail, messageArgs...)
+		return err
+	}
+
+	if err := safe_socket.SendAll(client.conn, clientMessage); err != nil {
+		logger.Error("send-message", logger.Fail, messageArgs...)
+		return err
+	}
+
+	return nil
+}
+
+func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
+	var responseBuffer []byte
+	var err error
+
+	frameLenBytes, err := safe_socket.RecvAll(client.conn, 1)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, nil	// no message (no error)
+		} else {
+			logger.Error("", logger.Fail, err)
+			return nil, err
+		}
+	}
+
+	frameLen := uint8(frameLenBytes[0])
+	if frameLen > 0 {
+		responseBuffer, err = safe_socket.RecvAll(client.conn, int(frameLen))
+		if err != nil {
+			logger.Error("recv-message", logger.Fail, err)
+			return nil, err
+		}
+	}
+	return responseBuffer, nil
+}
+
+func (client *Client) requestReply(message string, messageId int) ([]byte, error) {
+	messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
+	logger.Info("server-request-reply", logger.InProgress, messageArgs...)
+		
+	if err := client.sendMessage(message, messageArgs); err != nil {
+		logger.Error("send-message", logger.Fail, messageArgs...)
+		return nil, err
+	}
+
+	reply, err := client.receiveMessage(messageArgs)
+	if err != nil {
+		logger.Error("recv-message", logger.Fail, messageArgs...)
+		return nil, err
+	}
+
+	return reply, nil
+}
+
 func (client *Client) Run() error {
 	const mainAction = "test-echo-server"
 	defer client.conn.Close()
@@ -95,49 +163,52 @@ func (client *Client) Run() error {
 	scanner := bufio.NewScanner(client.inputFile)
 	writer := bufio.NewWriter(client.outputFile)
 	
+	responseBuffer, err := client.requestReply(client.config.AgencyId, -1)
+	if responseBuffer != nil {
+		logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la agencia")
+		return errors.New("Server respondio incorrectamente al enviar agencia")
+    }	
+
+	var messageArgs []any
 	messageId := 0
 	for scanner.Scan() {
-		messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
+		messageArgs = []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
 		
-		clientMessage := scanner.Text()
-
-		if err := safe_socket.SendAll(client.conn, []byte(clientMessage)); err != nil {
-			logger.Error("send-message", logger.Fail, messageArgs...)
+		if responseBuffer, err := client.requestReply(scanner.Text(), messageId); err != nil {
+			logger.Error("request-reply", logger.Fail, messageArgs...)
 			return err
+		} else if responseBuffer != nil {
+			logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la apuesta")
+			return errors.New("Server respondio incorrectamente al enviar apuesta")
 		}
-
-		responseBuffer, err := safe_socket.RecvAll(client.conn, ECHO_CLIENT_BUFFER_SIZE)
-		if err != nil {
-			logger.Error("recv-response", logger.Fail, messageArgs...)
-			return err
-		}
-
-		if string(responseBuffer) == clientMessage {
-			logger.Error("check-response", logger.Fail, messageArgs...)
-			return err
-		}
-
-		// make crea un buffer inicializado en cero. 
-		// se debe contar la cantidad de bytes distintos de null para no escribir basura
-		valid_byte_count := 0
-		for responseBuffer[valid_byte_count] != '\x00' {
-			valid_byte_count += 1
-		}
-		responseBuffer[valid_byte_count] = '\r'
-		responseBuffer[valid_byte_count+1] = '\n'
-		valid_byte_count += 2 
-
-		writen_bytes, err := writer.Write(responseBuffer[0:valid_byte_count])
-		if writen_bytes != valid_byte_count || err != nil {
-			logger.Error("write-response-to-file", logger.Fail, messageArgs...)
-			return err
-		}
-		writer.Flush()
 		messageId += 1 
-
-		time.Sleep(ECHO_CLIENT_MESSAGE_DELAY_MS * time.Millisecond)
 	}
+
+	if 	tcpConn, ok := client.conn.(*net.TCPConn); ok {
+        if err := tcpConn.CloseWrite(); err != nil {
+            logger.Error("close-write", logger.Fail, "err", err)
+            return err
+        }
+    }	
+	
+	// Recibir los ganadores 
+	message, err := client.receiveMessage(messageArgs)
+	for err == nil && message != nil {
+	    outputFileLine := append(message, '\r', '\n')
+	    if _, err = writer.Write(outputFileLine); err != nil {
+	        logger.Error("write-response-to-file", logger.Fail, messageArgs...)
+	        return err
+	    }
+
+	    message, err = client.receiveMessage(messageArgs)
+	}
+
+	if err != nil   {
+	    logger.Error("receive-message", logger.Fail, messageArgs...)
+	    return err
+	}
+	writer.Flush()
 	logger.Info(mainAction, logger.Success, "agency-id", client.config.AgencyId)
 
 	return nil
