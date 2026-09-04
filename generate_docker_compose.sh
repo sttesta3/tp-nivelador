@@ -38,6 +38,7 @@ for ((i=0; i<$1; i++)); do echo "
       - SERVER_PORT=5678
       - INPUT_FILE=/input/input-0.csv
       - OUTPUT_FILE=/output/output-$i.csv
+      - BATCH_SIZE=4
     volumes:
       - ./input:/input
       - ./output:/output" >> docker-compose.yaml 

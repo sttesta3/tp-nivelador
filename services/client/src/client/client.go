@@ -21,6 +21,7 @@ type ClientConfig struct {
 	AgencyId   string
 	InputFile  string
 	OutputFile string
+	BatchSize  int
 }
 
 type Client struct {
@@ -171,11 +172,31 @@ func (client *Client) Run() error {
 
 	var messageArgs []any
 	messageId := 0
+	var line string
+	chunkMessage := ""
+	
 	for scanner.Scan() {
 		messageArgs = []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
 		
-		if responseBuffer, err := client.requestReply(scanner.Text(), messageId); err != nil {
+		line = scanner.Text()
+		if len(line) + len(chunkMessage) < client.config.BatchSize {
+			chunkMessage += line + "\n"
+		} else {
+			if responseBuffer, err := client.requestReply(chunkMessage, messageId); err != nil {
+				logger.Error("request-reply", logger.Fail, messageArgs...)
+				return err
+			} else if responseBuffer != nil {
+				logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la apuesta")
+				return errors.New("Server respondio incorrectamente al enviar apuesta")
+			}
+			chunkMessage = line
+			messageId += 1 
+		}
+	}
+
+	if chunkMessage != "" {
+		if responseBuffer, err := client.requestReply(chunkMessage, messageId); err != nil {
 			logger.Error("request-reply", logger.Fail, messageArgs...)
 			return err
 		} else if responseBuffer != nil {

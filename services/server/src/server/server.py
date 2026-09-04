@@ -18,18 +18,22 @@ class Server:
         return bytes([0])
 
     def _process_message(self, message, agency_id) -> [lottery.Bet]:
-        message_fields = message.decode('utf-8').split(',')
-        if len(message_fields) != 5:
-            logger.Warn("process-message",logger.Fail, "Mensaje mal formateado, debe tener cinco campos separados por coma")
-            raise Exception()
+        bets = []
+        for message_lines in message.decode('utf-8').split('\n'):
+            message_fields = message_lines.split(',')
+            if len(message_fields) != 5:
+                logger.Warn("process-message",logger.Fail, "Mensaje mal formateado, debe tener cinco campos separados por coma")
+                raise Exception()
 
-        first_name = message_fields[0]
-        last_name = message_fields[1]
-        document = int(message_fields[2])
-        birthdate = message_fields[3]
-        number = int(message_fields[4])
+            first_name = message_fields[0]
+            last_name = message_fields[1]
+            document = int(message_fields[2])
+            birthdate = message_fields[3]
+            number = int(message_fields[4])
 
-        return [lottery.Bet(agency_id,first_name,last_name,document,birthdate,number)]        
+            bets.append(lottery.Bet(agency_id,first_name,last_name,document,birthdate,number))
+
+        return bets
 
     def _receive_message(self, client_socket):
         message = bytearray()
