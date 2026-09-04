@@ -12,10 +12,11 @@ class Server:
         # Saca la informacion de la agencia del mensaje, tal que siga respetando el echo server        
         response = f"{bet.first_name},{bet.last_name},{str(bet.document)},{bet.birthdate},{str(bet.number)}"
         response_bytes = response.encode('utf-8')
-        return bytes([len(response_bytes)]) + response_bytes
+        frame_len = len(response_bytes).to_bytes(2, byteorder='big')
+        return frame_len + response_bytes
 
     def _format_ack(self) -> bytes:
-        return bytes([0])
+        return (0).to_bytes(2, byteorder='big')
 
     def _process_message(self, message, agency_id) -> [lottery.Bet]:
         bets = []
@@ -38,9 +39,11 @@ class Server:
 
     def _receive_message(self, client_socket):
         message = bytearray()
-        message_len = safe_socket.recv_all(client_socket, 1)
-        if message_len:
-            message = safe_socket.recv_all(client_socket, message_len[0])
+        message_len_bytes = safe_socket.recv_all(client_socket, 2)
+        if message_len_bytes:
+            message_len = int.from_bytes(message_len_bytes, byteorder='big')
+            if message_len > 0:
+                message = safe_socket.recv_all(client_socket, message_len)
         return message
 
     def _handle_client(self, client_socket):
