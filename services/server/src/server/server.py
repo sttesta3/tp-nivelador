@@ -19,19 +19,20 @@ class Server:
 
     def _process_message(self, message, agency_id) -> [lottery.Bet]:
         bets = []
-        for message_lines in message.decode('utf-8').split('\n'):
-            message_fields = message_lines.split(',')
-            if len(message_fields) != 5:
-                logger.Warn("process-message",logger.Fail, "Mensaje mal formateado, debe tener cinco campos separados por coma")
-                raise Exception()
+        for message_line in message.decode('utf-8').split('\n'):
+            if message_line: 
+                message_fields = message_line.split(',')
+                if len(message_fields) != 5:
+                    logger.error("process-message","Mensaje mal formateado",message_lines)
+                    raise Exception()
 
-            first_name = message_fields[0]
-            last_name = message_fields[1]
-            document = int(message_fields[2])
-            birthdate = message_fields[3]
-            number = int(message_fields[4])
+                first_name = message_fields[0]
+                last_name = message_fields[1]
+                document = int(message_fields[2])
+                birthdate = message_fields[3]
+                number = int(message_fields[4])
 
-            bets.append(lottery.Bet(agency_id,first_name,last_name,document,birthdate,number))
+                bets.append(lottery.Bet(agency_id,first_name,last_name,document,birthdate,number))
 
         return bets
 
@@ -57,6 +58,7 @@ class Server:
         try:
             logger.info(action, logger.LogResult.in_progress)
             while True:
+                logger.info(action, logger.LogResult.in_progress, "messages-amount", message_amount)
                 client_message = self._receive_message(client_socket)
                 if not client_message:
                     logger.info(
