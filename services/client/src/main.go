@@ -34,12 +34,31 @@ func loadConfig() (client.ClientConfig, error) {
 		return client.ClientConfig{}, errors.New("OUTPUT_FILE environment variable is required")
 	}
 
+	batchSize := 1
+	batchSizeStr := os.Getenv("BATCH_SIZE")
+	if batchSizeStr != "" {
+		batchSize := 0
+		// Implementacion manual de atoi 
+		for _, char := range batchSizeStr {
+			batchSize *= 10 
+			if char < '0' || char > '9' {
+				return client.ClientConfig{}, errors.New("BATCH_SIZE should be numeric")
+			}
+			batchSize += int(char - '0')
+		}
+
+		if batchSize == 0 {
+			return client.ClientConfig{}, errors.New("BATCH_SIZE should be positive")
+		}
+	} 
+
 	return client.ClientConfig{
 		ServerHost: serverHost,
 		ServerPort: serverPort,
 		AgencyId:   agencyId,
 		InputFile:  inputFile,
 		OutputFile: outputFile,
+		BatchSize:  batchSize,
 	}, nil
 }
 
