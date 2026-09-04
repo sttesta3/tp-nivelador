@@ -45,8 +45,12 @@ class Server:
     def _handle_client(self, client_socket):
         action = "handle-client"
 
+        # Lottery creation
         agency_id = int(self._receive_message(client_socket))
-        client_lottery =  lottery.Lottery(str(agency_id))
+        client_lottery_file = str(agency_id) 
+        with open(client_lottery_file, "w"):
+            client_lottery =  lottery.Lottery(client_lottery_file)
+        # ACK
         safe_socket.send_all(client_socket, self._format_ack())
 
         message_amount = 0
