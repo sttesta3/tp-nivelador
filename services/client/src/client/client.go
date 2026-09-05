@@ -104,12 +104,12 @@ func (client *Client) formatFrame(message string) ([]byte, error) {
 func (client *Client) sendMessage(message string, messageArgs []any) (error) {
 	clientMessage, err := client.formatFrame(message)
 	if err != nil {
-		logger.Error("format-message", logger.Fail, messageArgs...)
+		logger.Error("format-message", logger.Fail, "err", err)
 		return err
 	}
 
 	if err := safe_socket.SendAll(client.conn, clientMessage); err != nil {
-		logger.Error("send-message", logger.Fail, messageArgs...)
+		logger.Error("send-all", logger.Fail, "err", err)
 		return err
 	}
 
@@ -125,7 +125,7 @@ func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
 		if errors.Is(err, io.EOF) {
 			return nil, nil	// no hay mensaje (no hay error)
 		} else {
-			logger.Error("", logger.Fail, err)
+			logger.Error("receive-message", logger.Fail, "err", err)
 			return nil, err
 		}
 	}
@@ -134,7 +134,7 @@ func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
 	if frameLen > 0 {
 		responseBuffer, err = safe_socket.RecvAll(client.conn, frameLen)
 		if err != nil {
-			logger.Error("recv-message", logger.Fail, err)
+			logger.Error("recv-message", logger.Fail, "err", err)
 			return nil, err
 		}
 	}
@@ -170,7 +170,7 @@ func (client *Client) Run() error {
 	
 	responseBuffer, err := client.requestReply(client.config.AgencyId, -1)
 	if responseBuffer != nil {
-		logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la agencia")
+		logger.Error("protocol-error", logger.Fail, "err", "Server respondio incorrectamente al enviar la agencia")
 		return errors.New("Server respondio incorrectamente al enviar agencia")
     }	
 
@@ -194,7 +194,7 @@ func (client *Client) Run() error {
 			logger.Error("request-reply", logger.Fail, messageArgs...)
 			return err
 		} else if responseBuffer != nil {
-			logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la apuesta")
+			logger.Error("protocol-error", logger.Fail, "err", "Server respondio incorrectamente al enviar la apuesta")
 			return errors.New("Server respondio incorrectamente al enviar apuesta")
 		}
 
@@ -213,7 +213,7 @@ func (client *Client) Run() error {
 	for err == nil && message != nil {
 	    outputFileLine := append(message, '\r', '\n')
 	    if _, err = writer.Write(outputFileLine); err != nil {
-	        logger.Error("write-response-to-file", logger.Fail, messageArgs...)
+	        logger.Error("write-response-to-file", logger.Fail, "err", err)
 	        return err
 	    }
 
