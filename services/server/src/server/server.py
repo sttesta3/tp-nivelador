@@ -118,7 +118,7 @@ class Server:
         while not shutdown_event.is_set():
             try:
                 logger.info(action, logger.LogResult.in_progress)
-                client_socket, _ = self.socket.accept()   # TODO Gemini here is the issue ? 
+                client_socket, _ = self.socket.accept()   
                 logger.info(action, logger.LogResult.success)
                 client_thread = threading.Thread(
                     target=self._handle_client,
