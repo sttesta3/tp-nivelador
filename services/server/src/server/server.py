@@ -3,6 +3,9 @@ import logger
 import safe_socket
 import lottery 
 import threading
+from sigterm_barrier import SigtermBarrier 
+
+shutdown_event = threading.Event()
 
 class Server:
     def __init__(self, server_host: str, server_port: int, agency_quorum_min: int) -> None:
@@ -56,13 +59,12 @@ class Server:
         client_lottery_file = str(agency_id) 
         with open(client_lottery_file, "w"):
             client_lottery =  lottery.Lottery(client_lottery_file)
-        # ACK
         safe_socket.send_all(client_socket, self._format_ack())
 
         message_amount = 0
         try:
             logger.info(action, logger.LogResult.in_progress)
-            while True:
+            while not shutdown_event.is_set():
                 logger.info(action, logger.LogResult.in_progress, "messages-amount", message_amount)
                 client_message = self._receive_message(client_socket)
                 if not client_message:
@@ -75,9 +77,10 @@ class Server:
 
                     # Debemos tener AGENCY_QUORUM_MIN para ejecutar la siguiente seccion
                     sync_barrier.wait()
-                    for bet in client_lottery.load_bets():
-                        if client_lottery.has_won(bet):
-                            safe_socket.send_all(client_socket, self._format_response(bet))
+                    if not shutdown_event.is_set():
+                        for bet in client_lottery.load_bets():
+                            if client_lottery.has_won(bet):
+                                safe_socket.send_all(client_socket, self._format_response(bet))
                     
                     client_socket.close()
                     
@@ -88,19 +91,23 @@ class Server:
                 message_amount += 1
 
                 safe_socket.send_all(client_socket, self._format_ack())
+            client_socket.close()
+
         except Exception as e:
             logger.error(
                 action, logger.LogResult.fail, "messages-amount", message_amount
             )
+            client_socket.close()
             raise e
 
     def run(self):
         action = "accept-connection"
-        sync_barrier = threading.Barrier(self.agency_quorum_min)
+        sync_barrier = SigtermBarrier(self.agency_quorum_min)
+        threads = []
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
             server_socket.bind((self.server_host, self.server_port))
             server_socket.listen()
-            while True:
+            while not shutdown_event.is_set():
                 try:
                     logger.info(action, logger.LogResult.in_progress)
                     client_socket, _ = server_socket.accept()
@@ -109,7 +116,15 @@ class Server:
                         target=self._handle_client,
                         args=(client_socket,sync_barrier,)
                     )
+                    threads.append(client_thread)
                     client_thread.start()                    
                 except Exception as e:
                     logger.error(action, logger.LogResult.fail)
                     raise e
+            
+            sync_barrier.sigterm_signal()
+            for thread in threads:
+                thread.join()
+
+    def stop():
+        shutdown_event.set()

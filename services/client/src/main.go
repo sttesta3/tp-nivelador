@@ -68,7 +68,7 @@ func run() int {
 		logger.Error("load-config", logger.Fail, "err", err)
 		return 1
 	}
-
+	
 	client, err := client.NewClient(config)
 	if err != nil {
 		logger.Error("client-new", logger.Fail, "err", err)
