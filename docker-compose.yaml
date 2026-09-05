@@ -10,6 +10,7 @@ services:
       - PYTHONUNBUFFERED=1
       - SERVER_HOST=server
       - SERVER_PORT=5678
+      - AGENCY_QUORUM_MIN=3
 
   client_0:
     build:
@@ -22,7 +23,7 @@ services:
       - AGENCY_ID=0
       - SERVER_HOST=server
       - SERVER_PORT=5678
-      - INPUT_FILE=/input/input-2.csv
+      - INPUT_FILE=/input/input-0.csv
       - OUTPUT_FILE=/output/output-0.csv
       - BATCH_SIZE=256
     volumes:
@@ -40,7 +41,7 @@ services:
       - AGENCY_ID=1
       - SERVER_HOST=server
       - SERVER_PORT=5678
-      - INPUT_FILE=/input/input-2.csv
+      - INPUT_FILE=/input/input-1.csv
       - OUTPUT_FILE=/output/output-1.csv
       - BATCH_SIZE=256
     volumes:
