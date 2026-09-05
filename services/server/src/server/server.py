@@ -2,6 +2,7 @@ import socket
 import logger
 import safe_socket
 import lottery 
+import threading
 
 class Server:
     def __init__(self, server_host: str, server_port: int) -> None:
@@ -70,10 +71,14 @@ class Server:
                         "messages-amount",
                         message_amount,
                     )
+
+                    # Debemos tener AGENCY_QUORUM_MIN para ejecutar la siguiente seccion
                     for bet in client_lottery.load_bets():
                         if client_lottery.has_won(bet):
-                            logger.info(action, "va mensaje", bet.first_name)
                             safe_socket.send_all(client_socket, self._format_response(bet))
+                    
+                    client_socket.close()
+                    
                     return
                 
                 bets = self._process_message(client_message, agency_id)
@@ -96,9 +101,12 @@ class Server:
                 try:
                     logger.info(action, logger.LogResult.in_progress)
                     client_socket, _ = server_socket.accept()
-                    with client_socket:
-                        logger.info(action, logger.LogResult.success)
-                        self._handle_client(client_socket)
+                    logger.info(action, logger.LogResult.success)
+                    client_thread = threading.Thread(
+                        target=self._handle_client,
+                        args=(client_socket,)
+                    )
+                    client_thread.start()                    
                 except Exception as e:
                     logger.error(action, logger.LogResult.fail)
                     raise e
