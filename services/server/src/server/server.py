@@ -5,9 +5,10 @@ import lottery
 import threading
 
 class Server:
-    def __init__(self, server_host: str, server_port: int) -> None:
+    def __init__(self, server_host: str, server_port: int, agency_quorum_min: int) -> None:
         self.server_host = server_host
         self.server_port = server_port
+        self.agency_quorum_min = agency_quorum_min
 
     def _format_response(self, bet: Lottery.bet) -> bytes:
         # Saca la informacion de la agencia del mensaje, tal que siga respetando el echo server        
@@ -47,7 +48,7 @@ class Server:
                 message = safe_socket.recv_all(client_socket, message_len)
         return message
 
-    def _handle_client(self, client_socket):
+    def _handle_client(self, client_socket, sync_barrier: threading.Barrier):
         action = "handle-client"
 
         # Lottery creation
@@ -73,6 +74,7 @@ class Server:
                     )
 
                     # Debemos tener AGENCY_QUORUM_MIN para ejecutar la siguiente seccion
+                    sync_barrier.wait()
                     for bet in client_lottery.load_bets():
                         if client_lottery.has_won(bet):
                             safe_socket.send_all(client_socket, self._format_response(bet))
@@ -94,6 +96,7 @@ class Server:
 
     def run(self):
         action = "accept-connection"
+        sync_barrier = threading.Barrier(self.agency_quorum_min)
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
             server_socket.bind((self.server_host, self.server_port))
             server_socket.listen()
@@ -104,7 +107,7 @@ class Server:
                     logger.info(action, logger.LogResult.success)
                     client_thread = threading.Thread(
                         target=self._handle_client,
-                        args=(client_socket,)
+                        args=(client_socket,sync_barrier,)
                     )
                     client_thread.start()                    
                 except Exception as e:

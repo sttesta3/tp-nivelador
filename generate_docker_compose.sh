@@ -37,7 +37,7 @@ for ((i=0; i<$1; i++)); do echo "
       - AGENCY_ID=$i
       - SERVER_HOST=server
       - SERVER_PORT=5678
-      - INPUT_FILE=/input/input-2.csv
+      - INPUT_FILE=/input/input-$i.csv
       - OUTPUT_FILE=/output/output-$i.csv
       - BATCH_SIZE=256
     volumes:
