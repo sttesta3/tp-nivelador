@@ -34,10 +34,10 @@ func loadConfig() (client.ClientConfig, error) {
 		return client.ClientConfig{}, errors.New("OUTPUT_FILE environment variable is required")
 	}
 
-	batchSize := 1
+	var batchSize int
 	batchSizeStr := os.Getenv("BATCH_SIZE")
 	if batchSizeStr != "" {
-		batchSize := 0
+		batchSize = 0
 		// Implementacion manual de atoi 
 		for _, char := range batchSizeStr {
 			batchSize *= 10 
@@ -50,7 +50,9 @@ func loadConfig() (client.ClientConfig, error) {
 		if batchSize == 0 {
 			return client.ClientConfig{}, errors.New("BATCH_SIZE should be positive")
 		}
-	} 
+	} else {
+		batchSize = 1
+	}
 
 	return client.ClientConfig{
 		ServerHost: serverHost,

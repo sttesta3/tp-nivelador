@@ -101,7 +101,7 @@ func (client *Client) formatFrame(message string) ([]byte, error) {
 	return append([]byte{highByte, lowByte}, []byte(message)...), nil
 }
 
-func (client *Client) sendMessage(message string, messageArgs []any) (error) {
+func (client *Client) sendMessage(message string) (error) {
 	clientMessage, err := client.formatFrame(message)
 	if err != nil {
 		logger.Error("format-message", logger.Fail, "err", err)
@@ -116,7 +116,7 @@ func (client *Client) sendMessage(message string, messageArgs []any) (error) {
 	return nil
 }
 
-func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
+func (client *Client) receiveMessage() ([]byte, error) {
 	var responseBuffer []byte
 	var err error
 
@@ -145,12 +145,12 @@ func (client *Client) requestReply(message string, messageId int) ([]byte, error
 	messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 	logger.Info("server-request-reply", logger.InProgress, messageArgs...)
 		
-	if err := client.sendMessage(message, messageArgs); err != nil {
+	if err := client.sendMessage(message); err != nil {
 		logger.Error("send-message", logger.Fail, messageArgs...)
 		return nil, err
 	}
 
-	reply, err := client.receiveMessage(messageArgs)
+	reply, err := client.receiveMessage()
 	if err != nil {
 		logger.Error("recv-message", logger.Fail, messageArgs...)
 		return nil, err
@@ -176,20 +176,26 @@ func (client *Client) Run() error {
 
 	var messageArgs []any
 	messageId := 0
-		
-	var line string
-	for scanner.Scan() {
+	
+	moreLines := scanner.Scan()
+	for moreLines {
 		messageArgs = []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
 		
+		betsInMessage := 0 
 		chunkMessage := ""
-		line = scanner.Text() 
-		bets_in_message := 0 
-		for line != "" && len(line) + len(chunkMessage) <= 254 && bets_in_message < client.config.BatchSize {
-			chunkMessage += line + "\n"
-			line = scanner.Text()
-			bets_in_message += 1 
+		fullMessage := false
+		for ! fullMessage {
+			line := scanner.Text()
+			if moreLines && len(line)+len(chunkMessage) <= 65534 && betsInMessage < client.config.BatchSize {
+				chunkMessage += line + "\n"
+				betsInMessage += 1 
+				moreLines = scanner.Scan()
+			} else {
+				fullMessage = true
+			}
 		}
+
 		if responseBuffer, err := client.requestReply(chunkMessage, messageId); err != nil {
 			logger.Error("request-reply", logger.Fail, messageArgs...)
 			return err
@@ -209,7 +215,7 @@ func (client *Client) Run() error {
     }	
 	
 	// Recibir los ganadores 
-	message, err := client.receiveMessage(messageArgs)
+	message, err := client.receiveMessage()
 	for err == nil && message != nil {
 	    outputFileLine := append(message, '\r', '\n')
 	    if _, err = writer.Write(outputFileLine); err != nil {
@@ -217,7 +223,7 @@ func (client *Client) Run() error {
 	        return err
 	    }
 
-	    message, err = client.receiveMessage(messageArgs)
+	    message, err = client.receiveMessage()
 	}
 
 	if err != nil   {
