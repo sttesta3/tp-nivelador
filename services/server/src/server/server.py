@@ -12,8 +12,11 @@ class Server:
         self.server_host = server_host
         self.server_port = server_port
         self.agency_quorum_min = agency_quorum_min
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.bind((self.server_host,self.server_port))        
+        self.socket.listen()        
 
-    def _format_response(self, bet: Lottery.bet) -> bytes:
+    def _format_response(self, bet: Lottery.Bet) -> bytes:
         # Saca la informacion de la agencia del mensaje, tal que siga respetando el echo server        
         response = f"{bet.first_name},{bet.last_name},{str(bet.document)},{bet.birthdate},{str(bet.number)}"
         response_bytes = response.encode('utf-8')
@@ -77,11 +80,16 @@ class Server:
 
                     # Debemos tener AGENCY_QUORUM_MIN para ejecutar la siguiente seccion
                     sync_barrier.wait()
+
+                    winners = []
                     if not shutdown_event.is_set():
-                        for bet in client_lottery.load_bets():
-                            if client_lottery.has_won(bet):
-                                safe_socket.send_all(client_socket, self._format_response(bet))
-                    
+                        winners = [bet for bet in client_lottery.load_bets() if client_lottery.has_won(bet)] 
+                    if not shutdown_event.is_set():
+                        # Llegado a este punto es mejor que el hilo termine.
+                        # Es una loteria, los ganadores se cuentan por unidad 
+                        for winner in winners:
+                            safe_socket.send_all(client_socket, self._format_response(winner))
+
                     client_socket.close()
                     
                     return
@@ -97,34 +105,46 @@ class Server:
             logger.error(
                 action, logger.LogResult.fail, "messages-amount", message_amount
             )
-            client_socket.close()
-            raise e
+            if client_socket:
+                client_socket.close()
+            if not shutdown_event.is_set():
+                raise e
+
 
     def run(self):
         action = "accept-connection"
         sync_barrier = SigtermBarrier(self.agency_quorum_min)
         threads = []
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-            server_socket.bind((self.server_host, self.server_port))
-            server_socket.listen()
-            while not shutdown_event.is_set():
-                try:
-                    logger.info(action, logger.LogResult.in_progress)
-                    client_socket, _ = server_socket.accept()
-                    logger.info(action, logger.LogResult.success)
-                    client_thread = threading.Thread(
-                        target=self._handle_client,
-                        args=(client_socket,sync_barrier,)
-                    )
-                    threads.append(client_thread)
-                    client_thread.start()                    
-                except Exception as e:
-                    logger.error(action, logger.LogResult.fail)
-                    raise e
+        while not shutdown_event.is_set():
+            try:
+                logger.info(action, logger.LogResult.in_progress)
+                client_socket, _ = self.socket.accept()   # TODO Gemini here is the issue ? 
+                logger.info(action, logger.LogResult.success)
+                client_thread = threading.Thread(
+                    target=self._handle_client,
+                    args=(client_socket,sync_barrier,)
+                )
+                client_thread.start()                    
+                threads.append(client_thread)
+                # Eliminamos los threads que finalizaron
+                threads = [thread for thread in threads if thread.is_alive()]
+            except Exception as e:
+                if shutdown_event.is_set():
+                    break
+                logger.error(action, logger.LogResult.fail)
+                raise e
             
-            sync_barrier.sigterm_signal()
-            for thread in threads:
-                thread.join()
+        logger.info("SIGTERM. Deteniendo servidor", logger.LogResult.in_progress)
+        sync_barrier.sigterm_signal()
+        for thread in threads:
+            logger.info(f"Deteniendo hilo {thread.native_id}", logger.LogResult.in_progress)
+            thread.join()
+            logger.info(f"SIGTERM. Hilo detenido {thread.native_id}", logger.LogResult.in_progress)
 
-    def stop():
+    def stop(self):
         shutdown_event.set()
+        try:
+            self.socket.close()
+        except Exception as e:
+            logger.error("sigterm-stop", logger.LogResult.fail, e)
+            raise e

@@ -1,4 +1,5 @@
 from threading import Condition
+import logger 
 
 class SigtermBarrier:
     def __init__(self, quorum: int):
@@ -10,6 +11,7 @@ class SigtermBarrier:
 
     def wait(self):
         # Inspirado en la implementacion de std::sync::Barrier de Rust 
+        # La barrera es liberada al recibir un sigterm, liberando a los threads en wait
         with self.cvar:
             local_epoch = self.epoch
             self.count += 1 
@@ -20,8 +22,11 @@ class SigtermBarrier:
                 self.epoch += 1 
                 self.count = 0
                 self.cvar.notify_all()
+        logger.info("sigterm-barrier-exit", logger.LogResult.success)
 
     def sigterm_signal(self):
         with self.cvar:
             self.sigterm = True
             self.cvar.notify_all()
+        logger.info("sigterm-barrier-abort", logger.LogResult.in_progress)
+

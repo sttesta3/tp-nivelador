@@ -12,7 +12,11 @@ AGENCY_QUORUM_MIN = int(os.environ["AGENCY_QUORUM_MIN"])
 def main():
     logger.init()
     s = server.Server(SERVER_HOST, SERVER_PORT, AGENCY_QUORUM_MIN)
-    signal(SIGTERM, s.stop())
+    
+    def signal_handler(signum,frame): 
+        logger.info("server-run", logger.LogResult.in_progress, "SIGTERM. Deteniendo servidor")
+        s.stop()
+    signal(SIGTERM, signal_handler)
 
     try:
         s.run()
