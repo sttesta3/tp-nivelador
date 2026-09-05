@@ -3,6 +3,9 @@ package main
 import (
 	"errors"
 	"os"
+	"os/signal"
+	"context"
+	"syscall"
 
 	client "github.com/7574-sistemas-distribuidos/tp-nivelador/src/client"
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/logger"
@@ -64,7 +67,7 @@ func loadConfig() (client.ClientConfig, error) {
 	}, nil
 }
 
-func run() int {
+func run() int {	
 	config, err := loadConfig()
 	if err != nil {
 		logger.Error("load-config", logger.Fail, "err", err)
@@ -77,11 +80,34 @@ func run() int {
 		return 1
 	}
 
-	if err := client.Run(); err != nil {
-		logger.Error("client-run", logger.Fail, "err", err)
-		return 1
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
+	defer stop()
+
+	errorChannel := make(chan error)
+	go func() {
+		errorChannel<-client.Run()	
+	}()
+	
+	select {
+		case err := <-errorChannel:
+			if err != nil && !client.IsStop() {
+				logger.Error("client-run", logger.Fail, "err", err)
+				return 1
+			}
+			return 0
+
+		case <-ctx.Done():
+			logger.Info("SIGTERM-client", logger.InProgress)
+			client.Stop() 
+
+			err := <-errorChannel
+			if err != nil && !client.IsStop() {
+				logger.Error("client-run", logger.Fail, "err", err)
+				return 1
+			}
+			logger.Info("SIGTERM-client", logger.Success)
+			return 0
 	}
-	return 0
 }
 
 func main() {

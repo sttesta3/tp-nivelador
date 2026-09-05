@@ -54,18 +54,18 @@ class Server:
                 message = safe_socket.recv_all(client_socket, message_len)
         return message
 
-    def _handle_client(self, client_socket, sync_barrier: threading.Barrier):
+    def _handle_client(self, client_socket, sync_barrier: SigtermBarrier ):
         action = "handle-client"
 
         # Lottery creation
-        agency_id = int(self._receive_message(client_socket))
-        client_lottery_file = str(agency_id) 
-        with open(client_lottery_file, "w"):
-            client_lottery =  lottery.Lottery(client_lottery_file)
-        safe_socket.send_all(client_socket, self._format_ack())
-
-        message_amount = 0
         try:
+            agency_id = int(self._receive_message(client_socket))
+            client_lottery_file = str(agency_id) 
+            with open(client_lottery_file, "w"):
+                client_lottery =  lottery.Lottery(client_lottery_file)
+            safe_socket.send_all(client_socket, self._format_ack())
+
+            message_amount = 0
             logger.info(action, logger.LogResult.in_progress)
             while not shutdown_event.is_set():
                 logger.info(action, logger.LogResult.in_progress, "messages-amount", message_amount)
@@ -101,10 +101,11 @@ class Server:
                 safe_socket.send_all(client_socket, self._format_ack())
             client_socket.close()
 
+        except BrokenPipeError:
+            logger.error(action, logger.LogResult.fail, "cliente cerro la conexion")
+            return             
         except Exception as e:
-            logger.error(
-                action, logger.LogResult.fail, "messages-amount", message_amount
-            )
+            logger.error(action, logger.LogResult.fail, "messages-amount", message_amount)
             if client_socket:
                 client_socket.close()
             if not shutdown_event.is_set():
