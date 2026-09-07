@@ -4,15 +4,17 @@
 
 ###  Protocolo 
 
-Se propone un protocolo solicitud-respuesta donde emisor envia frames especificado en siguiente seccion, y receptor responde ACK  con largo del mensaje igual a cero, permitiendo al cliente enviar el proximo paquete. 
+Se propone un protocolo solicitud-respuesta donde emisor envia frame especificado en siguiente seccion, y receptor responde ACK  con largo del mensaje igual a cero, permitiendo al cliente enviar el proximo frame. 
 
 ### Frame 
 
+```text
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-| largo del mensaje               | Mensaje 
+|     Largo del Mensaje         |       Mensaje ...             |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
 
 ## Capa de Dominio
 
@@ -20,16 +22,16 @@ Se propone un protocolo solicitud-respuesta donde emisor envia frames especifica
 
 Los mensajes se envian sobre el frame antes mencionado. Los tipos de mensaje son 
 
-- Agencia: El contenido del frame es el agency_id 
+- Agencia: El contenido del mensaje es el agency_id 
 
-- Apuesta: El contenido del frame son las apuestas separadas por '\n'
+- Apuesta: El contenido del mensaje son las apuestas separadas por '\n'
 
-- ACK: Frame con largo de mensaje igual a cero. 
+- ACK: Frame con largo de mensaje igual a cero y contenido vacio. 
 
 ### Secuencia de mensajes 
 
+```text
   Cliente                      Servidor
-
     |                            |
     |--------- Agencia  -------->|  
     |                            |
@@ -39,15 +41,18 @@ Los mensajes se envian sobre el frame antes mencionado. Los tipos de mensaje son
     |                            |
     |<------ ACK (Response) -----|  
      (hasta quedarse sin apuestas)
-
-   ( Cliente cierra socket de escritura )  
-
+     (Cliente cierra socket de escritura)  
     |<-------- Apuesta  ---------|  
     |                            |
     |<-------- Apuesta  ---------|  
     |                            |
     |<-------- Apuesta  ---------|  
      (hasta quedarse sin ganadores)
+```
+
+Nota: El cierre del socket de escritura de parte del cliente se intepreta desde el servidor como el fin de envío de apuestas, habilitandolo a procesar las mismas. 
+
+Nota2: El envío de ganadores se realiza en mensajes individuales, apoyandose en TCP para asegurar la recepción. 
 
 # Concurrencia
 
