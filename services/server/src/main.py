@@ -3,14 +3,21 @@ import sys
 
 import logger
 import server
+from signal import signal, SIGTERM
 
 SERVER_HOST = os.environ["SERVER_HOST"]
 SERVER_PORT = int(os.environ["SERVER_PORT"])
-AGENCY_QUORUM_MIN = int(os.environ["AGENCY_QUORUM_MIN"])
+AGENCY_QUORUM_MIN = int(os.getenv("AGENCY_QUORUM_MIN",1))
 
 def main():
     logger.init()
     s = server.Server(SERVER_HOST, SERVER_PORT, AGENCY_QUORUM_MIN)
+    
+    def signal_handler(signum,frame): 
+        logger.info("server-run", logger.LogResult.in_progress, "SIGTERM. Deteniendo servidor")
+        s.stop()
+    signal(SIGTERM, signal_handler)
+
     try:
         s.run()
     except Exception as e:

@@ -25,10 +25,11 @@ type ClientConfig struct {
 }
 
 type Client struct {
-	conn    net.Conn
+	conn       net.Conn
 	config 	   ClientConfig
 	inputFile  *os.File
-	outputFile *os.File	
+	outputFile *os.File
+	state	   bool	
 }
 
 func NewClient(config ClientConfig) (*Client, error) {
@@ -43,7 +44,7 @@ func NewClient(config ClientConfig) (*Client, error) {
 		return nil, err
 	}
 
-	client := &Client{conn: conn, config: config, inputFile: inputFile, outputFile: outputFile}
+	client := &Client{conn: conn, config: config, inputFile: inputFile, outputFile: outputFile, state: true}
 	return client, nil
 }
 
@@ -101,22 +102,23 @@ func (client *Client) formatFrame(message string) ([]byte, error) {
 	return append([]byte{highByte, lowByte}, []byte(message)...), nil
 }
 
-func (client *Client) sendMessage(message string, messageArgs []any) (error) {
+func (client *Client) sendMessage(message string) (error) {
 	clientMessage, err := client.formatFrame(message)
 	if err != nil {
-		logger.Error("format-message", logger.Fail, messageArgs...)
+		logger.Error("format-message", logger.Fail, "err", err)
 		return err
 	}
 
 	if err := safe_socket.SendAll(client.conn, clientMessage); err != nil {
-		logger.Error("send-message", logger.Fail, messageArgs...)
+		logger.Error("send-message", logger.Fail, "err", err)
 		return err
 	}
 
 	return nil
 }
 
-func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
+func (client *Client) receiveMessage() ([]byte, error) {
+	action := "receive-message"
 	var responseBuffer []byte
 	var err error
 
@@ -125,16 +127,16 @@ func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
 		if errors.Is(err, io.EOF) {
 			return nil, nil	// no hay mensaje (no hay error)
 		} else {
-			logger.Error("", logger.Fail, err)
+			logger.Error(action, logger.Fail, "err", err)
 			return nil, err
 		}
-	}
+	}	
 
 	frameLen := (int(frameLenBytes[0]) << 8 | int(frameLenBytes[1]))
 	if frameLen > 0 {
 		responseBuffer, err = safe_socket.RecvAll(client.conn, frameLen)
 		if err != nil {
-			logger.Error("recv-message", logger.Fail, err)
+			logger.Error("recv-message", logger.Fail, "err", err)
 			return nil, err
 		}
 	}
@@ -142,21 +144,35 @@ func (client *Client) receiveMessage(messageArgs []any) ([]byte, error) {
 }
 
 func (client *Client) requestReply(message string, messageId int) ([]byte, error) {
+	action := "request-reply"
 	messageArgs := []any{"agency-id", client.config.AgencyId, "message-id", messageId}
-	logger.Info("server-request-reply", logger.InProgress, messageArgs...)
+	logger.Info(action, logger.InProgress, messageArgs...)
 		
-	if err := client.sendMessage(message, messageArgs); err != nil {
-		logger.Error("send-message", logger.Fail, messageArgs...)
+	if err := client.sendMessage(message); err != nil {
+		logger.Error(action, logger.Fail, messageArgs...)
 		return nil, err
 	}
 
-	reply, err := client.receiveMessage(messageArgs)
+	reply, err := client.receiveMessage()
 	if err != nil {
-		logger.Error("recv-message", logger.Fail, messageArgs...)
+		logger.Error(action, logger.Fail, messageArgs...)
 		return nil, err
 	}
 
 	return reply, nil
+}
+
+func (client *Client) IsStop() bool {
+	return ! client.state
+} 
+
+
+func (client *Client) Stop() {
+	client.state = false
+	if client.conn != nil {
+		// Debemos cerrar el socket para desbloquear Recv / Send
+		client.conn.Close()
+	}
 }
 
 func (client *Client) Run() error {
@@ -168,61 +184,75 @@ func (client *Client) Run() error {
 	scanner := bufio.NewScanner(client.inputFile)
 	writer := bufio.NewWriter(client.outputFile)
 	
-	responseBuffer, err := client.requestReply(client.config.AgencyId, -1)
-	if responseBuffer != nil {
-		logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la agencia")
+	if responseBuffer, err := client.requestReply(client.config.AgencyId, -1); err != nil {
+		logger.Error(mainAction, logger.Fail, "err", err)
+		return err
+	} else if responseBuffer != nil {
+		logger.Error("protocol-error", logger.Fail, "err", "Server respondio incorrectamente al enviar la agencia")
 		return errors.New("Server respondio incorrectamente al enviar agencia")
     }	
 
 	var messageArgs []any
 	messageId := 0
-		
-	var line string
-	for scanner.Scan() {
+	
+	moreLines := scanner.Scan()
+	for moreLines && client.state {
 		messageArgs = []any{"agency-id", client.config.AgencyId, "message-id", messageId}
 		logger.Info(mainAction, logger.InProgress, messageArgs...)
 		
+		betsInMessage := 0 
 		chunkMessage := ""
-		line = scanner.Text() 
-		bets_in_message := 0 
-		for line != "" && len(line) + len(chunkMessage) <= 254 && bets_in_message < client.config.BatchSize {
-			chunkMessage += line + "\n"
-			line = scanner.Text()
-			bets_in_message += 1 
+		fullMessage := false
+		for ! fullMessage && client.state {
+			line := scanner.Text()
+			if moreLines && len(line)+len(chunkMessage) <= 65534 && betsInMessage < client.config.BatchSize {
+				chunkMessage += line + "\n"
+				betsInMessage += 1 
+				moreLines = scanner.Scan()
+			} else {
+				fullMessage = true
+			}
 		}
-		if responseBuffer, err := client.requestReply(chunkMessage, messageId); err != nil {
-			logger.Error("request-reply", logger.Fail, messageArgs...)
-			return err
-		} else if responseBuffer != nil {
-			logger.Error("protocol-error", logger.Fail, "Server respondio incorrectamente al enviar la apuesta")
-			return errors.New("Server respondio incorrectamente al enviar apuesta")
+
+		if client.state {
+			if responseBuffer, err := client.requestReply(chunkMessage, messageId); err != nil {
+				logger.Error("request-reply", logger.Fail, messageArgs...)
+				return err
+			} else if responseBuffer != nil {
+				logger.Error("protocol-error", logger.Fail, "err", "Server respondio incorrectamente al enviar la apuesta")
+				return errors.New("Server respondio incorrectamente al enviar apuesta")
+			}
 		}
 
 		messageId += 1 
 	}
 
-	if 	tcpConn, ok := client.conn.(*net.TCPConn); ok {
-        if err := tcpConn.CloseWrite(); err != nil {
-            logger.Error("close-write", logger.Fail, "err", err)
-            return err
-        }
-    }	
-	
-	// Recibir los ganadores 
-	message, err := client.receiveMessage(messageArgs)
-	for err == nil && message != nil {
-	    outputFileLine := append(message, '\r', '\n')
-	    if _, err = writer.Write(outputFileLine); err != nil {
-	        logger.Error("write-response-to-file", logger.Fail, messageArgs...)
-	        return err
-	    }
-
-	    message, err = client.receiveMessage(messageArgs)
+	if client.state {
+		if 	tcpConn, ok := client.conn.(*net.TCPConn); ok {
+        	if err := tcpConn.CloseWrite(); err != nil {
+    	        logger.Error("close-write", logger.Fail, "err", err)
+	            return err
+    	    }
+	    }	
 	}
+	
+	// Recibir los ganadores (si se llega a este punto, se deja terminar) 
+	if client.state {
+		message, err := client.receiveMessage()
+		for err == nil && message != nil {
+	    	outputFileLine := append(message, '\r', '\n')
+		    if _, err = writer.Write(outputFileLine); err != nil {
+		        logger.Error("write-response-to-file", logger.Fail, "err", err)
+	        	return err
+	    	}
 
-	if err != nil   {
-	    logger.Error("receive-message", logger.Fail, messageArgs...)
-	    return err
+	    	message, err = client.receiveMessage()
+		}
+
+		if err != nil   {
+	    	logger.Error("receive-message", logger.Fail, messageArgs...)
+		    return err
+		}
 	}
 	writer.Flush()
 	logger.Info(mainAction, logger.Success, "agency-id", client.config.AgencyId)

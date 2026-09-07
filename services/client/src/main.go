@@ -3,6 +3,9 @@ package main
 import (
 	"errors"
 	"os"
+	"os/signal"
+	"context"
+	"syscall"
 
 	client "github.com/7574-sistemas-distribuidos/tp-nivelador/src/client"
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/logger"
@@ -34,10 +37,10 @@ func loadConfig() (client.ClientConfig, error) {
 		return client.ClientConfig{}, errors.New("OUTPUT_FILE environment variable is required")
 	}
 
-	batchSize := 1
+	var batchSize int
 	batchSizeStr := os.Getenv("BATCH_SIZE")
 	if batchSizeStr != "" {
-		batchSize := 0
+		batchSize = 0
 		// Implementacion manual de atoi 
 		for _, char := range batchSizeStr {
 			batchSize *= 10 
@@ -50,7 +53,9 @@ func loadConfig() (client.ClientConfig, error) {
 		if batchSize == 0 {
 			return client.ClientConfig{}, errors.New("BATCH_SIZE should be positive")
 		}
-	} 
+	} else {
+		batchSize = 1
+	}
 
 	return client.ClientConfig{
 		ServerHost: serverHost,
@@ -62,24 +67,47 @@ func loadConfig() (client.ClientConfig, error) {
 	}, nil
 }
 
-func run() int {
+func run() int {	
 	config, err := loadConfig()
 	if err != nil {
 		logger.Error("load-config", logger.Fail, "err", err)
 		return 1
 	}
-
+	
 	client, err := client.NewClient(config)
 	if err != nil {
 		logger.Error("client-new", logger.Fail, "err", err)
 		return 1
 	}
 
-	if err := client.Run(); err != nil {
-		logger.Error("client-run", logger.Fail, "err", err)
-		return 1
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
+	defer stop()
+
+	errorChannel := make(chan error)
+	go func() {
+		errorChannel<-client.Run()	
+	}()
+	
+	select {
+		case err := <-errorChannel:
+			if err != nil && !client.IsStop() {
+				logger.Error("client-run", logger.Fail, "err", err)
+				return 1
+			}
+			return 0
+
+		case <-ctx.Done():
+			logger.Info("SIGTERM-client", logger.InProgress)
+			client.Stop() 
+
+			err := <-errorChannel
+			if err != nil && !client.IsStop() {
+				logger.Error("client-run", logger.Fail, "err", err)
+				return 1
+			}
+			logger.Info("SIGTERM-client", logger.Success)
+			return 0
 	}
-	return 0
 }
 
 func main() {
